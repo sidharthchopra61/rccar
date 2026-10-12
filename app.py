@@ -15,7 +15,10 @@ HARDWARE_URL = os.getenv("RC_HARDWARE_URL", "").rstrip("/")
 CAMERA_URL = os.getenv("RC_CAMERA_URL", "")
 
 COMMAND_TIMEOUT = 1.0
-VALID_COMMANDS = {"forward", "backward", "left", "right", "stop"}
+VALID_COMMANDS = {
+    "forward", "backward", "left", "right", "stop",
+    "forward_left", "forward_right", "backward_left", "backward_right"
+}
 
 current_command = "stop"
 last_command_time = time.time()
@@ -92,21 +95,21 @@ PAGE = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#080d18">
-<title>RC Pilot Controller</title>
+<meta name="theme-color" content="#070a12">
+<title>RC Pilot Cockpit</title>
 
 <style>
 :root {
-    --bg: #080d18;
-    --panel: #111b2d;
-    --panel2: #1a2941;
-    --border: #2c3d59;
+    --bg: #070a12;
+    --panel: #0f1523;
+    --panel2: #162035;
+    --border: #23314a;
     --text: #f4f7ff;
-    --muted: #9aaac2;
-    --blue: #3478f6;
-    --cyan: #39d7e8;
-    --red: #f0445b;
-    --green: #35d69a;
+    --muted: #8899b3;
+    --blue: #0091ff;
+    --cyan: #00e5ff;
+    --red: #ff334b;
+    --green: #00e676;
 }
 
 * {
@@ -117,10 +120,13 @@ PAGE = r"""<!DOCTYPE html>
 html, body {
     margin: 0;
     width: 100%;
-    min-height: 100%;
+    height: 100%;
+    overflow: hidden;
     background: var(--bg);
     color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 body {
@@ -133,97 +139,153 @@ button, input {
 
 button {
     touch-action: none;
-    user-select: none;
-    -webkit-user-select: none;
     cursor: pointer;
 }
 
-.app {
-    min-height: 100dvh;
-    display: flex;
+/* =========================================
+   BLANK ROTATE SCREEN (ACTIVE IN PORTRAIT)
+   ========================================= */
+#orientationGuard {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100dvh;
+    background: #05070c;
+    z-index: 999999;
+    display: none;
     flex-direction: column;
-    gap: 9px;
-    padding: 10px;
+    justify-content: center;
+    align-items: center;
+    padding: 24px;
+    text-align: center;
 }
 
+#orientationGuard svg {
+    width: 64px;
+    height: 64px;
+    fill: var(--blue);
+    margin-bottom: 18px;
+    animation: rotatePhone 2.2s ease-in-out infinite;
+}
+
+#orientationGuard h2 {
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    margin: 0 0 8px 0;
+    color: var(--text);
+}
+
+#orientationGuard p {
+    font-size: 12px;
+    color: var(--muted);
+    margin: 0;
+    max-width: 260px;
+}
+
+@keyframes rotatePhone {
+    0%, 15% { transform: rotate(0deg); }
+    50%, 65% { transform: rotate(90deg); }
+    100% { transform: rotate(0deg); }
+}
+
+
+.app {
+    width: 100vw;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    padding: 6px 10px;
+    gap: 6px;
+}
+
+/* TOP HEADER */
 .header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
-    min-height: 38px;
+    height: 28px;
     flex-shrink: 0;
 }
 
 .brand {
     display: flex;
     align-items: center;
-    gap: 9px;
-    min-width: 0;
+    gap: 7px;
 }
 
 .logo {
-    width: 35px;
-    height: 35px;
-    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: linear-gradient(135deg, var(--blue), var(--cyan));
+    color: #040810;
+    font-weight: 900;
+    font-size: 14px;
     display: grid;
     place-items: center;
-    border-radius: 10px;
-    background: linear-gradient(135deg, var(--blue), var(--cyan));
-    color: #06101c;
-    font-weight: 900;
-    font-size: 20px;
 }
 
 .brand-name {
-    font-size: 17px;
-    font-weight: 900;
+    font-size: 13px;
+    font-weight: 800;
     letter-spacing: .5px;
 }
 
-.sub {
-    color: var(--muted);
-    font-size: 10px;
-    margin-top: 3px;
+.hud-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 
 .status {
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: 6px;
     border: 1px solid var(--border);
-    border-radius: 30px;
-    padding: 8px 10px;
+    border-radius: 20px;
+    padding: 3px 8px;
     color: var(--muted);
-    font-size: 10px;
-    white-space: nowrap;
+    font-size: 9px;
+    font-weight: 700;
 }
 
 .dot {
-    width: 8px;
-    height: 8px;
-    flex-shrink: 0;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
     background: var(--green);
 }
 
-.camera {
-    position: relative;
-    flex-shrink: 0;
-    height: clamp(145px, 25dvh, 270px);
+.small-btn {
     border: 1px solid var(--border);
-    border-radius: 14px;
-    overflow: hidden;
-    background: #03060c;
+    border-radius: 6px;
+    color: var(--text);
+    background: var(--panel2);
+    padding: 3px 8px;
+    font-size: 10px;
+    font-weight: 700;
 }
 
-.camera img {
+/* CAMERA VIEW (LARGER ALLOCATION) */
+.camera-container {
+    position: relative;
+    flex: 1 1 58%;
+    min-height: 0;
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    background: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.camera-container img {
     width: 100%;
     height: 100%;
-    position: absolute;
-    inset: 0;
     object-fit: contain;
-    background: #03060c;
+    background: #000;
 }
 
 .camera-placeholder {
@@ -233,513 +295,369 @@ button {
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    gap: 7px;
+    gap: 6px;
     text-align: center;
-    padding: 12px;
-    background: radial-gradient(ellipse, #172743, #080d18);
+    padding: 10px;
     color: var(--muted);
-    font-size: 12px;
+    font-size: 11px;
 }
 
 .camera-placeholder strong {
     color: var(--text);
-    font-size: 14px;
+    font-size: 13px;
 }
 
 .camera-badge {
     position: absolute;
-    z-index: 2;
-    top: 8px;
+    top: 6px;
     left: 8px;
-    padding: 5px 8px;
-    border-radius: 5px;
-    background: rgba(0, 0, 0, 0.6);
-    font-size: 10px;
-    letter-spacing: 1px;
-}
-
-.camera-settings {
-    display: flex;
-    gap: 6px;
-    flex-shrink: 0;
-}
-
-.camera-settings input {
-    min-width: 0;
-    flex: 1;
-    width: 100%;
-    padding: 10px;
-    color: var(--text);
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-}
-
-.small-button {
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    color: var(--text);
-    background: var(--panel2);
-    padding: 0 12px;
-    min-height: 38px;
+    padding: 3px 6px;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.65);
+    font-size: 9px;
     font-weight: 700;
-}
-
-.main {
-    flex: 1;
-    min-height: 250px;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 175px;
-    gap: 9px;
-}
-
-.controls, .side {
-    min-width: 0;
-    min-height: 0;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 15px;
-    padding: 12px;
-}
-
-.controls {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.section-title {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    font-weight: 900;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-}
-
-.muted {
-    color: var(--muted);
-    font-size: 10px;
-    letter-spacing: 0;
-}
-
-.control-layout {
-    flex: 1;
-    min-height: 0;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
-    gap: 10px;
-    align-items: stretch;
-}
-
-.group {
-    min-width: 0;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: stretch;
-    gap: 10px;
-}
-
-.group-title {
-    color: var(--muted);
-    text-align: center;
-    font-size: 10px;
-    font-weight: 800;
-    letter-spacing: 1px;
-}
-
-.control-btn {
-    flex: 1;
-    min-height: 60px;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    gap: 4px;
-    padding: 5px 2px;
+    letter-spacing: .8px;
     color: var(--text);
-    border: 1px solid #344866;
-    border-radius: 14px;
-    background: linear-gradient(145deg, #20304a, #121c2d);
-    box-shadow: 0 4px 0 #070b13;
+    z-index: 2;
 }
 
-.control-btn.active {
-    background: linear-gradient(145deg, #3478f6, #2050ac);
-    border-color: #8ab1ff;
-    box-shadow: 0 1px 0 #070b13;
-    transform: translateY(2px);
+/* COMPACT CONTROLS DECK */
+.deck {
+    flex: 0 0 38%;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 1fr 140px 1fr;
+    gap: 12px;
+    align-items: stretch;
+}
+
+/* LEFT: FORWARD & BACKWARD */
+.throttle-col {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    height: 100%;
+}
+
+/* RIGHT: LEFT & RIGHT */
+.steering-row {
+    display: flex;
+    gap: 6px;
+    height: 100%;
+}
+
+/* CENTER: POWER, STOP, READOUT */
+.center-col {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 5px;
+    height: 100%;
+}
+
+.ctrl-btn {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    color: var(--text);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    background: linear-gradient(145deg, #182236, #0e1422);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+    touch-action: none;
+    transition: all 0.06s ease;
+}
+
+.ctrl-btn.active {
+    background: linear-gradient(145deg, #0080ff, #0050aa);
+    border-color: #6bb5ff;
+    box-shadow: 0 0 14px rgba(0, 145, 255, 0.5);
+    transform: scale(0.97);
 }
 
 .arrow {
-    font-size: clamp(24px, 3.5vw, 36px);
+    font-size: clamp(20px, 4.5vh, 28px);
     line-height: 1;
     font-weight: 900;
 }
 
-.btn-label {
-    font-size: 10px;
-    font-weight: 900;
-    letter-spacing: .4px;
-    text-align: center;
-}
-
-.centre .control-btn {
-    min-height: 64px;
-}
-
-.power-btn {
-    background: linear-gradient(145deg, #176e55, #104b3c);
-    border-color: #2a9b77;
-}
-
-.power-btn.off {
-    background: linear-gradient(145deg, #a9273c, #6d1728);
-    border-color: #ed6578;
+.btn-lbl {
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: .5px;
 }
 
 .stop-btn {
-    background: linear-gradient(145deg, #a92c42, #721b2d);
-    border-color: #e85b70;
-}
-
-.side {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-.speed-number {
-    font-size: 29px;
+    background: linear-gradient(145deg, #c41c32, #7a0c1c);
+    border-color: #ff4d64;
+    color: #fff;
     font-weight: 900;
-    margin-top: 7px;
+    letter-spacing: 1px;
 }
 
-.speed-number span {
-    font-size: 12px;
-    color: var(--muted);
+.stop-btn:active {
+    transform: scale(0.96);
 }
 
-input[type=range] {
-    width: 100%;
-    accent-color: var(--blue);
-    margin: 10px 0;
-}
-
-.speed-labels {
-    display: flex;
-    justify-content: space-between;
-    color: var(--muted);
+.power-btn {
+    background: linear-gradient(145deg, #10664e, #0a4233);
+    border-color: #1ed49d;
     font-size: 10px;
-}
-
-.readout {
-    padding: 10px;
-    background: #0a1120;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-}
-
-.readout-value {
-    margin-top: 5px;
-    font-size: 14px;
-    font-weight: 900;
-    overflow-wrap: anywhere;
-}
-
-.power-state {
-    font-size: 12px;
-    color: var(--green);
     font-weight: 800;
 }
 
-.power-state.off {
-    color: #ff6578;
+.power-btn.off {
+    background: linear-gradient(145deg, #3d2a13, #241707);
+    border-color: #e09228;
+    color: #e09228;
 }
 
-.hint {
-    margin-top: auto;
-    font-size: 10px;
-    color: var(--muted);
-    line-height: 1.6;
+.center-hud {
+    background: #0b101c;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 9px;
+    font-weight: 800;
 }
 
-/* Portrait mobile layout */
-@media (max-width: 650px) and (orientation: portrait) {
-    .app {
-        padding: max(7px, env(safe-area-inset-top)) 7px max(9px, env(safe-area-inset-bottom));
-        gap: 8px;
-    }
-
-    .brand-name { font-size: 15px; }
-    .sub { font-size: 9px; }
-    .status { padding: 7px 8px; font-size: 9px; }
-
-    .camera {
-        height: clamp(145px, 23dvh, 230px);
-    }
-
-    .main {
-        display: flex;
-        flex-direction: column;
-        min-height: 0;
-        flex: none;
-        gap: 8px;
-    }
-
-    .controls {
-        padding: 10px 8px;
-        gap: 10px;
-    }
-
-    .control-layout {
-        gap: 7px;
-        min-height: 225px;
-    }
-
-    .group { gap: 8px; }
-    .group-title { font-size: 9px; }
-
-    .control-btn {
-        min-height: 80px;
-        border-radius: 12px;
-    }
-
-    .centre .control-btn { min-height: 80px; }
-
-    .arrow { font-size: clamp(26px, 7vw, 38px); }
-    .btn-label { font-size: clamp(9px, 2.5vw, 11px); }
-
-    .side {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-        gap: 10px;
-        padding: 10px;
-    }
-
-    .readout, .hint { grid-column: 1 / -1; }
-    .speed-number { font-size: 25px; }
+.hud-val {
+    color: var(--cyan);
+    font-family: monospace;
 }
 
-/* Landscape mobile */
-@media (orientation: landscape) and (max-height: 520px) {
-    html, body {
-        width: 100%;
-        height: 100%;
-        overflow: hidden;
-    }
+/* SETTINGS MODAL */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    backdrop-filter: blur(4px);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+}
 
-    .app {
-        height: 100dvh;
-        min-height: 0;
-        overflow: hidden;
-        padding: 4px 7px;
-        gap: 5px;
-    }
+.modal-box {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+    width: 90%;
+    max-width: 380px;
+}
 
-    .header { min-height: 27px; }
-    .logo { width: 26px; height: 26px; font-size: 14px; }
-    .brand-name { font-size: 13px; }
-    .sub { display: none; }
-    .status { padding: 5px 7px; font-size: 9px; }
+.modal-box h3 { margin: 0 0 10px 0; font-size: 13px; }
+.modal-box input {
+    width: 100%;
+    padding: 8px;
+    background: #060a12;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 12px;
+    margin-bottom: 12px;
+}
 
-    .camera {
-        height: 18dvh;
-        min-height: 60px;
-        max-height: 100px;
-    }
-
-    .camera-settings { display: none; }
-
-    .main {
-        flex: 1;
-        min-height: 0;
-        grid-template-columns: minmax(0, 1fr) 130px;
-        gap: 5px;
-    }
-
-    .controls, .side {
-        padding: 5px;
-        gap: 4px;
-        overflow: hidden;
-    }
-
-    .control-layout {
-        flex: 1;
-        min-height: 0;
-        gap: 5px;
-    }
-
-    .group { gap: 4px; min-height: 0; }
-    .control-btn, .centre .control-btn {
-        flex: 1;
-        min-height: 0;
-        height: 100%;
-        padding: 1px;
-        gap: 2px;
-        border-radius: 8px;
-    }
-
-    .arrow { font-size: clamp(16px, 4vh, 24px); }
-    .btn-label { font-size: clamp(7px, 1.8vh, 9px); }
-
-    .side { gap: 4px; }
-    .speed-number { font-size: 18px; margin-top: 1px; }
-    input[type=range] { margin: 2px 0; }
-    .readout { padding: 5px; }
-    .readout-value { font-size: 11px; }
-    .hint { display: none; }
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
 }
 </style>
 </head>
 
 <body>
+
+<!-- FULL-SCREEN BLANK GUARD WITH AUTO-DETECT + MANUAL BYPASS -->
+<div id="orientationGuard" style="display:none;">
+    <svg viewBox="0 0 24 24" style="width:54px;height:54px;fill:#0091ff;margin-bottom:14px;">
+        <path d="M16.48 2.52c3.27 1.55 5.61 4.72 5.97 8.48h1.5C23.44 4.84 18.29 0 12 0l-.66.03 3.81 3.81 1.33-1.32zm-12.96 18.96C.25 19.93-2.09 16.76-2.45 13H-3.95C-3.44 19.16 1.71 24 8 24l.66-.03-3.81-3.81-1.33 1.32zM7.5 4A2.5 2.5 0 0 0 5 6.5v11A2.5 2.5 0 0 0 7.5 20h9a2.5 2.5 0 0 0 2.5-2.5v-11A2.5 2.5 0 0 0 16.5 4h-9z"/>
+    </svg>
+    <h2 style="font-size:17px;color:#fff;margin:0 0 6px 0;">Rotate to Landscape</h2>
+    <p style="font-size:12px;color:#8899b3;margin:0 0 16px 0;">Turn your phone sideways or enable Auto-Rotate.</p>
+    <button id="btnBypassRotate" style="background:#162035;border:1px solid #0091ff;color:#fff;padding:8px 16px;border-radius:8px;font-size:11px;font-weight:700;">
+        CONTINUE ANYWAY ➔
+    </button>
+</div>
+
+
 <div class="app">
 
+    <!-- TOP HEADER -->
     <header class="header">
         <div class="brand">
             <div class="logo">R</div>
-            <div>
-                <div class="brand-name">RC PILOT</div>
-                <div class="sub">WIRELESS VEHICLE CONTROL</div>
-            </div>
+            <div class="brand-name">RC PILOT</div>
         </div>
 
-        <div class="status">
-            <span class="dot" id="statusDot"></span>
-            <span id="connectionStatus">CONTROLLER READY</span>
+        <div class="hud-actions">
+            <div class="status">
+                <span class="dot" id="statusDot"></span>
+                <span id="connectionStatus">READY</span>
+            </div>
+            <button class="small-btn" id="btnSettings">CAM SETTINGS</button>
+            <button class="small-btn" id="btnFullscreen">FULLSCREEN</button>
         </div>
     </header>
 
-    <section class="camera">
-        <div class="camera-badge">LIVE CAMERA</div>
+    <!-- LARGE CAMERA VIEW -->
+    <section class="camera-container">
+        <div class="camera-badge">LIVE FPV</div>
         <img id="cameraImage" alt="RC camera" style="display:none">
         <div class="camera-placeholder" id="cameraPlaceholder">
-            <div style="font-size:28px">▣</div>
-            <strong>Camera feed</strong>
-            <span>Configure your camera stream URL below.</span>
+            <div style="font-size:26px">▣</div>
+            <strong>No Active Camera Stream</strong>
+            <span>Tap CAM SETTINGS to provide your video stream link.</span>
         </div>
     </section>
 
-    <section class="camera-settings">
-        <input id="cameraUrl" type="url" placeholder="Camera stream URL (e.g. http://192.168.1.50:81/stream)">
-        <button class="small-button" id="cameraApply">CONNECT</button>
-    </section>
+    <!-- COMPACT DUAL-THUMB DECK -->
+    <main class="deck">
 
-    <main class="main">
+        <!-- LEFT: FORWARD / BACKWARD -->
+        <div class="throttle-col">
+            <button type="button" class="ctrl-btn" data-key="forward">
+                <span class="arrow">▲</span>
+                <span class="btn-lbl">FORWARD</span>
+            </button>
+            <button type="button" class="ctrl-btn" data-key="backward">
+                <span class="arrow">▼</span>
+                <span class="btn-lbl">BACKWARD</span>
+            </button>
+        </div>
 
-        <section class="controls">
-            <div class="section-title">
-                <span>Driving controls</span>
-                <span class="muted">Press and hold</span>
+        <!-- CENTER: POWER, STATUS & STOP -->
+        <div class="center-col">
+            <button type="button" class="ctrl-btn power-btn off" id="powerToggle">
+                <span class="arrow" style="font-size:16px">⏻</span>
+                <span class="btn-lbl" id="powerLabel">POWER ON</span>
+            </button>
+
+            <div class="center-hud">
+                <span style="color:var(--muted)">CMD:</span>
+                <span class="hud-val" id="commandName">STOPPED</span>
             </div>
 
-            <div class="control-layout">
+            <button type="button" class="ctrl-btn stop-btn" id="stopButton">
+                <span class="arrow" style="font-size:18px">■</span>
+                <span class="btn-lbl">STOP</span>
+            </button>
+        </div>
 
-                <!-- LEFT COLUMN: FORWARD & BACKWARD -->
-                <div class="group">
-                    <div class="group-title">DRIVE</div>
+        <!-- RIGHT: LEFT / RIGHT -->
+        <div class="steering-row">
+            <button type="button" class="ctrl-btn" data-key="left">
+                <span class="arrow">◀</span>
+                <span class="btn-lbl">LEFT</span>
+            </button>
+            <button type="button" class="ctrl-btn" data-key="right">
+                <span class="arrow">▶</span>
+                <span class="btn-lbl">RIGHT</span>
+            </button>
+        </div>
 
-                    <button type="button" class="control-btn" data-command="forward">
-                        <span class="arrow">▲</span>
-                        <span class="btn-label">FORWARD</span>
-                    </button>
-
-                    <button type="button" class="control-btn" data-command="backward">
-                        <span class="arrow">▼</span>
-                        <span class="btn-label">BACKWARD</span>
-                    </button>
-                </div>
-
-                <!-- CENTER COLUMN: POWER & STOP -->
-                <div class="group centre">
-                    <div class="group-title">POWER</div>
-
-                    <button type="button" class="control-btn power-btn off" id="powerToggle">
-                        <span class="arrow">⏻</span>
-                        <span class="btn-label" id="powerLabel">POWER ON</span>
-                    </button>
-
-                    <button type="button" class="control-btn stop-btn" id="stopButton">
-                        <span class="arrow">■</span>
-                        <span class="btn-label">STOP</span>
-                    </button>
-                </div>
-
-                <!-- RIGHT COLUMN: LEFT & RIGHT -->
-                <div class="group">
-                    <div class="group-title">STEERING</div>
-
-                    <button type="button" class="control-btn" data-command="left">
-                        <span class="arrow">◀</span>
-                        <span class="btn-label">LEFT</span>
-                    </button>
-
-                    <button type="button" class="control-btn" data-command="right">
-                        <span class="arrow">▶</span>
-                        <span class="btn-label">RIGHT</span>
-                    </button>
-                </div>
-
-            </div>
-        </section>
-
-        <aside class="side">
-            <div>
-                <div class="section-title">SPEED</div>
-                <div class="speed-number">
-                    <span id="speedValue">60</span><span>%</span>
-                </div>
-                <input type="range" id="speedSlider" min="10" max="100" value="60">
-                <div class="speed-labels">
-                    <span>SLOW</span><span>FAST</span>
-                </div>
-            </div>
-
-            <div class="readout">
-                <div class="muted">POWER STATUS</div>
-                <div id="powerState" class="power-state off">POWER OFF</div>
-                <div class="muted" style="margin-top:8px">COMMAND</div>
-                <div id="commandName" class="readout-value">STOPPED</div>
-            </div>
-
-            <div class="hint">
-                Hold a direction to move.<br>
-                Release to stop.<br>
-                Spacebar stops on desktop.
-            </div>
-        </aside>
     </main>
 </div>
 
+<!-- SETTINGS MODAL -->
+<div class="modal-overlay" id="modalSettings">
+    <div class="modal-box">
+        <h3>Camera Stream Setup</h3>
+        <input id="cameraUrl" type="url" placeholder="http://192.168.1.50:81/stream">
+        <div class="modal-actions">
+            <button class="small-btn" id="modalClose">Cancel</button>
+            <button class="small-btn" id="modalSave" style="background:var(--blue)">Apply & Stream</button>
+        </div>
+    </div>
+</div>
+
 <script>
-const cameraUrlInput = document.getElementById("cameraUrl");
 const cameraImage = document.getElementById("cameraImage");
 const cameraPlaceholder = document.getElementById("cameraPlaceholder");
+const cameraUrlInput = document.getElementById("cameraUrl");
 const statusText = document.getElementById("connectionStatus");
 const statusDot = document.getElementById("statusDot");
 const commandName = document.getElementById("commandName");
-const speedSlider = document.getElementById("speedSlider");
-const speedValue = document.getElementById("speedValue");
 const powerToggle = document.getElementById("powerToggle");
 const powerLabel = document.getElementById("powerLabel");
-const powerState = document.getElementById("powerState");
+const stopButton = document.getElementById("stopButton");
 
 let isPoweredOn = false;
-let activeCommand = "stop";
-let activePointerId = null;
 let heartbeat = null;
 
-const allowedCommands = new Set(["forward", "backward", "left", "right"]);
+const guard = document.getElementById("orientationGuard");
+const bypassBtn = document.getElementById("btnBypassRotate");
+let bypassed = false;
 
-function setStatus(message, ok = true) {
-    statusText.textContent = message;
-    statusDot.style.background = ok ? "#35d69a" : "#f0445b";
+function checkOrientation() {
+    if (bypassed) {
+        guard.style.display = "none";
+        return;
+    }
+    // Check actual rendered width vs height
+    const isLandscape = window.innerWidth > window.innerHeight;
+    if (isLandscape) {
+        guard.style.display = "none";
+    } else {
+        guard.style.display = "flex";
+    }
+}
+
+// Check continuously on load, resize, and rotate
+window.addEventListener("resize", checkOrientation);
+window.addEventListener("orientationchange", checkOrientation);
+window.addEventListener("load", checkOrientation);
+checkOrientation();
+
+bypassBtn.addEventListener("click", () => {
+    bypassed = true;
+    guard.style.display = "none";
+    if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(() => {});
+    }
+});
+
+// Track active held directions for multi-touch (e.g. forward + right)
+const activeKeys = new Set();
+const pointerMap = new Map();
+
+function setStatus(msg, ok = true) {
+    statusText.textContent = msg;
+    statusDot.style.background = ok ? "var(--green)" : "var(--red)";
+}
+
+// Compute combined state: forward+right -> "forward_right"
+function computeCommand() {
+    if (!isPoweredOn || activeKeys.size === 0) {
+        return "stop";
+    }
+
+    const hasFwd = activeKeys.has("forward");
+    const hasBwd = activeKeys.has("backward");
+    const hasLeft = activeKeys.has("left");
+    const hasRight = activeKeys.has("right");
+
+    if (hasFwd && hasLeft) return "forward_left";
+    if (hasFwd && hasRight) return "forward_right";
+    if (hasBwd && hasLeft) return "backward_left";
+    if (hasBwd && hasRight) return "backward_right";
+
+    if (hasFwd) return "forward";
+    if (hasBwd) return "backward";
+    if (hasLeft) return "left";
+    if (hasRight) return "right";
+
+    return "stop";
 }
 
 async function postCommand(command) {
@@ -747,236 +665,203 @@ async function postCommand(command) {
         const response = await fetch("/api/command", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({
-                command,
-                speed: Number(speedSlider.value)
-            })
+            body: JSON.stringify({ command, speed: 75 })
         });
-
-        const result = await response.json();
-
-        if (!response.ok) {
-            setStatus(result.message || "COMMAND ERROR", false);
-            return false;
-        }
-
-        setStatus(result.demo ? "DEMO MODE" : "CONNECTED", true);
-        return true;
-    } catch (error) {
-        setStatus("SERVER ERROR", false);
-        return false;
-    }
-}
-
-function highlightCommand(command) {
-    document.querySelectorAll("[data-command]").forEach(button => {
-        button.classList.toggle("active", button.dataset.command === command);
-    });
-}
-
-function stopMovement() {
-    clearInterval(heartbeat);
-    heartbeat = null;
-    activePointerId = null;
-    activeCommand = "stop";
-
-    highlightCommand("stop");
-    commandName.textContent = isPoweredOn ? "STOPPED" : "POWER IS OFF";
-    postCommand("stop");
-}
-
-function startMovement(command, pointerId) {
-    if (!isPoweredOn || !allowedCommands.has(command)) {
-        return;
-    }
-
-    clearInterval(heartbeat);
-    activePointerId = pointerId;
-    activeCommand = command;
-
-    highlightCommand(command);
-    commandName.textContent = command.toUpperCase();
-    postCommand(command);
-
-    heartbeat = setInterval(() => {
-        if (isPoweredOn && activeCommand === command) {
-            postCommand(command);
+        const res = await response.json();
+        if (response.ok) {
+            setStatus(res.demo ? "DEMO MODE" : "CONNECTED", true);
         } else {
+            setStatus(res.message || "ERROR", false);
+        }
+    } catch (_) {
+        setStatus("OFFLINE", false);
+    }
+}
+
+function updateState() {
+    const nextCmd = computeCommand();
+    commandName.textContent = nextCmd.toUpperCase().replace("_", " ");
+
+    document.querySelectorAll("[data-key]").forEach(b => {
+        b.classList.toggle("active", activeKeys.has(b.dataset.key));
+    });
+
+    postCommand(nextCmd);
+
+    if (nextCmd !== "stop") {
+        if (!heartbeat) {
+            heartbeat = setInterval(() => {
+                postCommand(computeCommand());
+            }, 300);
+        }
+    } else {
+        if (heartbeat) {
             clearInterval(heartbeat);
             heartbeat = null;
         }
-    }, 300);
+    }
 }
 
-// Direction button listeners
-document.querySelectorAll("[data-command]").forEach(button => {
-    const command = button.dataset.command;
+function forceHalt() {
+    activeKeys.clear();
+    pointerMap.clear();
+    updateState();
+}
 
-    button.addEventListener("pointerdown", event => {
-        event.preventDefault();
+// Multi-touch Pointer Events on Controls
+document.querySelectorAll("[data-key]").forEach(btn => {
+    const key = btn.dataset.key;
 
-        if (!isPoweredOn) {
-            commandName.textContent = "POWER IS OFF";
-            return;
+    btn.addEventListener("pointerdown", e => {
+        e.preventDefault();
+        btn.setPointerCapture(e.pointerId);
+        pointerMap.set(e.pointerId, key);
+        activeKeys.add(key);
+        updateState();
+    });
+
+    const release = e => {
+        e.preventDefault();
+        const mapped = pointerMap.get(e.pointerId);
+        if (mapped) {
+            activeKeys.delete(mapped);
+            pointerMap.delete(e.pointerId);
         }
+        updateState();
+    };
 
-        stopMovement();
-        startMovement(command, event.pointerId);
-    });
-
-    button.addEventListener("pointerup", event => {
-        event.preventDefault();
-        if (activePointerId === event.pointerId) {
-            stopMovement();
-        }
-    });
-
-    button.addEventListener("pointercancel", stopMovement);
-    button.addEventListener("lostpointercapture", () => {
-        if (activeCommand !== "stop") stopMovement();
-    });
-    button.addEventListener("contextmenu", e => e.preventDefault());
+    btn.addEventListener("pointerup", release);
+    btn.addEventListener("pointercancel", release);
+    btn.addEventListener("lostpointercapture", release);
+    btn.addEventListener("contextmenu", e => e.preventDefault());
 });
 
-document.getElementById("stopButton").addEventListener("click", () => {
-    stopMovement();
+// Center Emergency Stop
+stopButton.addEventListener("click", () => {
+    forceHalt();
 });
 
-// Clean Power Toggle Listener
+// Power Button
 powerToggle.addEventListener("click", async () => {
-    stopMovement();
-    const desiredState = !isPoweredOn;
+    forceHalt();
+    const desired = !isPoweredOn;
 
     try {
-        const response = await fetch("/api/power", {
+        const res = await fetch("/api/power", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({ powered_on: desiredState })
+            body: JSON.stringify({ powered_on: desired })
         });
-
-        const result = await response.json();
-
-        if (!response.ok) {
-            setStatus("POWER ERROR", false);
-            return;
-        }
-
-        isPoweredOn = Boolean(result.powered_on);
+        const data = await res.json();
+        isPoweredOn = Boolean(data.powered_on);
 
         if (isPoweredOn) {
             powerToggle.classList.remove("off");
             powerLabel.textContent = "POWER OFF";
-            powerState.textContent = "POWER ON";
-            powerState.classList.remove("off");
-            commandName.textContent = "STOPPED";
             setStatus("POWER ON", true);
+            commandName.textContent = "STOPPED";
         } else {
             powerToggle.classList.add("off");
             powerLabel.textContent = "POWER ON";
-            powerState.textContent = "POWER OFF";
-            powerState.classList.add("off");
-            commandName.textContent = "POWER IS OFF";
             setStatus("POWER OFF", true);
+            commandName.textContent = "OFF";
         }
-    } catch (error) {
+    } catch (_) {
         setStatus("SERVER ERROR", false);
     }
 });
 
-speedSlider.addEventListener("input", () => {
-    speedValue.textContent = speedSlider.value;
-    if (isPoweredOn && activeCommand !== "stop") {
-        postCommand(activeCommand);
+// Keyboard controls
+const keyBindings = {
+    KeyW: "forward", ArrowUp: "forward",
+    KeyS: "backward", ArrowDown: "backward",
+    KeyA: "left", ArrowLeft: "left",
+    KeyD: "right", ArrowRight: "right"
+};
+
+window.addEventListener("keydown", e => {
+    if (e.code === "Space") {
+        e.preventDefault();
+        forceHalt();
+        return;
+    }
+    if (keyBindings[e.code] && !e.repeat) {
+        e.preventDefault();
+        activeKeys.add(keyBindings[e.code]);
+        updateState();
     }
 });
 
-window.addEventListener("blur", stopMovement);
-window.addEventListener("pagehide", stopMovement);
-document.addEventListener("visibilitychange", () => {
-    if (document.hidden) stopMovement();
-});
-
-document.addEventListener("keydown", event => {
-    const map = {
-        ArrowUp: "forward",
-        ArrowDown: "backward",
-        ArrowLeft: "left",
-        ArrowRight: "right"
-    };
-
-    if (event.code === "Space") {
-        event.preventDefault();
-        stopMovement();
-    } else if (map[event.key] && !event.repeat && isPoweredOn) {
-        event.preventDefault();
-        stopMovement();
-        startMovement(map[event.key], "keyboard");
+window.addEventListener("keyup", e => {
+    if (keyBindings[e.code]) {
+        e.preventDefault();
+        activeKeys.delete(keyBindings[e.code]);
+        updateState();
     }
 });
 
-document.addEventListener("keyup", event => {
-    if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) {
-        stopMovement();
-    }
+window.addEventListener("blur", forceHalt);
+window.addEventListener("pagehide", forceHalt);
+
+// Auto-stop if user rotates to portrait while driving
+window.addEventListener("orientationchange", () => {
+    forceHalt();
 });
 
+// Camera Setup
 function connectCamera(url) {
-    const cleanUrl = url.trim();
-
-    if (!cleanUrl) {
+    const clean = url.trim();
+    if (!clean) {
         cameraImage.style.display = "none";
         cameraPlaceholder.style.display = "flex";
         return;
     }
-
     cameraPlaceholder.style.display = "none";
     cameraImage.style.display = "block";
-    cameraImage.src = cleanUrl;
+    cameraImage.src = clean;
 
     cameraImage.onerror = () => {
         cameraImage.style.display = "none";
         cameraPlaceholder.style.display = "flex";
     };
-
     cameraImage.onload = () => {
         cameraPlaceholder.style.display = "none";
     };
 }
 
-async function saveConfig() {
-    try {
-        await fetch("/api/config", {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({
-                camera_url: cameraUrlInput.value.trim()
-            })
-        });
-    } catch (_) {}
-}
-
-document.getElementById("cameraApply").addEventListener("click", async () => {
-    connectCamera(cameraUrlInput.value);
-    await saveConfig();
+// Settings Modal
+const modal = document.getElementById("modalSettings");
+document.getElementById("btnSettings").addEventListener("click", () => modal.style.display = "flex");
+document.getElementById("modalClose").addEventListener("click", () => modal.style.display = "none");
+document.getElementById("modalSave").addEventListener("click", async () => {
+    const url = cameraUrlInput.value.trim();
+    connectCamera(url);
+    modal.style.display = "none";
+    await fetch("/api/config", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ camera_url: url })
+    });
 });
 
-async function loadConfig() {
-    try {
-        const response = await fetch("/api/config");
-        const config = await response.json();
-
-        cameraUrlInput.value = config.camera_url || "";
-        if (config.camera_url) {
-            connectCamera(config.camera_url);
-        }
-
-        setStatus(config.demo ? "DEMO MODE" : "CONNECTED", true);
-    } catch (_) {
-        setStatus("SERVER ERROR", false);
+// Fullscreen
+document.getElementById("btnFullscreen").addEventListener("click", () => {
+    if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+        document.exitFullscreen().catch(() => {});
     }
-}
+});
 
-loadConfig();
+// Initial config load
+fetch("/api/config").then(r => r.json()).then(cfg => {
+    if (cfg.camera_url) {
+        cameraUrlInput.value = cfg.camera_url;
+        connectCamera(cfg.camera_url);
+    }
+    setStatus(cfg.demo ? "DEMO MODE" : "CONNECTED", true);
+}).catch(() => setStatus("OFFLINE", false));
+
 postCommand("stop");
 </script>
 </body>
